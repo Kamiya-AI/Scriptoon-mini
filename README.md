@@ -80,6 +80,6 @@ AI画像生成PWAアプリ - fal-ai/nano-banana-proを使用したテキスト�
 
 ## 作成者
 
-Created by KAMIYA (2025)
+Created by KAMIYA (2026)
 
 Powered by [fal-ai/nano-banana-pro](https://fal.ai/models/fal-ai/nano-banana-pro)
