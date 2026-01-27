@@ -82,6 +82,7 @@ const outputFormatSelect = document.getElementById('output_format');
 const apiKeyInput = document.getElementById('api_key');
 const generateImageBtn = document.getElementById('generateImageBtn');
 const generateMangaBtn = document.getElementById('generateMangaBtn');
+const editTextBtn = document.getElementById('editTextBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const statusDiv = document.getElementById('status');
 const resultsDiv = document.getElementById('results');
@@ -112,6 +113,9 @@ const imageLibraryGrid = document.getElementById('imageLibraryGrid');
 const clearPromptBtn = document.getElementById('clearPromptBtn');
 const clearImagesBtn = document.getElementById('clearImagesBtn');
 const installButton = document.getElementById('installButton');
+const imageViewerModal = document.getElementById('imageViewerModal');
+const viewerImage = document.getElementById('viewerImage');
+const closeViewerBtn = document.getElementById('closeViewerBtn');
 
 // Image upload state
 let uploadedImages = [];
@@ -184,7 +188,7 @@ if (cameraFileInput) {
 settingsBtn.addEventListener('click', () => {
     settingsModal.style.display = 'flex';
     // Fill apiKey input if exists
-    const storedKey = localStorage.getItem('fal_key');
+    const storedKey = localStorage.getItem('fal_api_key');
     if (storedKey) {
         apiKeyInput.value = storedKey;
     }
@@ -226,6 +230,23 @@ if (settingsModal) {
                 checkApiKey();
                 alert('APIキーを削除しました');
             }
+
+
+        });
+    }
+}
+
+// Image Viewer Modal events
+if (imageViewerModal) {
+    imageViewerModal.addEventListener('click', (e) => {
+        if (e.target === imageViewerModal) {
+            imageViewerModal.style.display = 'none';
+        }
+    });
+
+    if (closeViewerBtn) {
+        closeViewerBtn.addEventListener('click', () => {
+            imageViewerModal.style.display = 'none';
         });
     }
 }
@@ -398,7 +419,7 @@ function renderCustomPrompts() {
         const item = document.createElement('div');
         item.className = 'custom-prompt-item';
 
-        // Header row with name input and copy button
+        // Header row with name input only (copy button removed)
         const headerRow = document.createElement('div');
         headerRow.className = 'custom-prompt-header';
 
@@ -413,26 +434,7 @@ function renderCustomPrompts() {
             renderCustomPromptsButtons();
         });
 
-        const copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.className = 'custom-prompt-copy-btn';
-        copyBtn.textContent = 'コピー';
-        copyBtn.onclick = async () => {
-            if (prompt.text) {
-                try {
-                    await navigator.clipboard.writeText(prompt.text);
-                    copyBtn.textContent = 'コピー済';
-                    setTimeout(() => {
-                        copyBtn.textContent = 'コピー';
-                    }, 1500);
-                } catch (err) {
-                    console.error('Copy failed:', err);
-                }
-            }
-        };
-
         headerRow.appendChild(nameInput);
-        headerRow.appendChild(copyBtn);
 
         const textArea = document.createElement('textarea');
         textArea.className = 'custom-prompt-text';
@@ -494,7 +496,8 @@ function checkPromptInput() {
     if (promptInput) {
         const hasPrompt = promptInput.value.trim().length > 0;
         if (generateImageBtn) generateImageBtn.disabled = !hasPrompt;
-        if (generateMangaBtn) generateMangaBtn.disabled = !hasPrompt;
+        if (generateMangaBtn) generateMangaBtn.disabled = false; // Always enabled for manga mode
+        if (editTextBtn) editTextBtn.disabled = !hasPrompt;
     }
 }
 
@@ -954,7 +957,13 @@ function displaySavedOutputImages(images) {
         img.src = image.url;
         img.alt = `Generated image ${index + 1}`;
         img.loading = 'lazy';
-        img.crossOrigin = 'anonymous'; // Enable cross-origin image saving
+        img.style.cursor = 'pointer';
+        img.title = 'クリックして編集';
+
+        // Click to open image editor
+        img.addEventListener('click', () => {
+            openImageEditor(image.url);
+        });
 
         const actions = document.createElement('div');
         actions.className = 'result-actions';
@@ -969,16 +978,40 @@ function displaySavedOutputImages(images) {
                 const response = await fetch(image.url);
                 const blob = await response.blob();
                 const blobUrl = URL.createObjectURL(blob);
+
+                // Derive file extension from content type or URL
+                let extension = '.png'; // Default fallback
+                if (blob.type === 'image/jpeg') extension = '.jpg';
+                else if (blob.type === 'image/webp') extension = '.webp';
+                else if (blob.type === 'image/png') extension = '.png';
+                else {
+                    // Fallback: try to detect from URL
+                    if (image.url.match(/\.jpe?g(\?|$)/i)) extension = '.jpg';
+                    else if (image.url.match(/\.webp(\?|$)/i)) extension = '.webp';
+                    else if (image.url.match(/\.png(\?|$)/i)) extension = '.png';
+                }
+
+                // Ensure filename has proper extension
+                let filename = `scriptoon-${Date.now()}-${index}${extension}`;
+
                 const tempLink = document.createElement('a');
                 tempLink.href = blobUrl;
-                tempLink.download = image.file_name || `banana-${Date.now()}-${index}.png`;
+                tempLink.download = filename;
                 document.body.appendChild(tempLink);
                 tempLink.click();
                 document.body.removeChild(tempLink);
                 setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
             } catch (error) {
-                console.error('Download failed:', error);
-                window.open(image.url, '_blank');
+                console.error('Download failed, using fallback:', error);
+                // Fallback: try direct link with download attribute
+                const fallbackFilename = `scriptoon-${Date.now()}-${index}.png`;
+                const fallbackLink = document.createElement('a');
+                fallbackLink.href = image.url;
+                fallbackLink.download = fallbackFilename;
+                fallbackLink.target = '_blank';
+                document.body.appendChild(fallbackLink);
+                fallbackLink.click();
+                document.body.removeChild(fallbackLink);
             }
         };
 
@@ -991,7 +1024,29 @@ function displaySavedOutputImages(images) {
             try {
                 const response = await fetch(image.url);
                 const blob = await response.blob();
-                const file = new File([blob], image.file_name || `banana-${Date.now()}-${index}.png`, { type: blob.type });
+
+                // Derive file extension from content type or URL
+                let extension = '.png'; // Default fallback
+                if (blob.type === 'image/jpeg') extension = '.jpg';
+                else if (blob.type === 'image/webp') extension = '.webp';
+                else if (blob.type === 'image/png') extension = '.png';
+                else {
+                    // Fallback: try to detect from URL
+                    if (image.url.match(/\.jpe?g(\?|$)/i)) extension = '.jpg';
+                    else if (image.url.match(/\.webp(\?|$)/i)) extension = '.webp';
+                    else if (image.url.match(/\.png(\?|$)/i)) extension = '.png';
+                }
+
+                // Create filename with proper extension
+                let filename = `scriptoon-${Date.now()}-${index}${extension}`;
+
+                // Determine MIME type
+                let mimeType = blob.type || 'image/png';
+                if (extension === '.jpg') mimeType = 'image/jpeg';
+                else if (extension === '.webp') mimeType = 'image/webp';
+                else if (extension === '.png') mimeType = 'image/png';
+
+                const file = new File([blob], filename, { type: mimeType });
 
                 if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
                     await navigator.share({
@@ -1199,6 +1254,15 @@ function updateImagePreview() {
         imgElement.src = img.dataUrl;
         imgElement.alt = `Uploaded image ${index + 1}`;
 
+        // Add click handler for viewer
+        imgElement.onclick = (e) => {
+            e.stopPropagation(); // Prevent file input open
+            if (imageViewerModal && viewerImage) {
+                viewerImage.src = img.dataUrl;
+                imageViewerModal.style.display = 'flex';
+            }
+        };
+
         const removeBtn = document.createElement('button');
         removeBtn.className = 'image-remove-btn';
         removeBtn.innerHTML = '×';
@@ -1343,9 +1407,10 @@ function setLoading(isLoading, buttonEl) {
         const textSpan = targetBtn.querySelector('.btn-text');
         const loaderSpan = targetBtn.querySelector('.btn-loader');
 
-        // Disable BOTH buttons to prevent parallel generation
+        // Disable ALL buttons to prevent parallel generation
         if (generateImageBtn) generateImageBtn.disabled = true;
         if (generateMangaBtn) generateMangaBtn.disabled = true;
+        if (editTextBtn) editTextBtn.disabled = true;
 
         if (textSpan) textSpan.style.display = 'none';
         if (loaderSpan) loaderSpan.style.display = 'inline-block';
@@ -1777,7 +1842,7 @@ function displayResults(data) {
 }
 
 // Generate images
-async function generateImages(mode = 'image') {
+async function generateImages(mode = 'image', promptPrefix = '') {
     // Determine which button triggered this
     const targetBtn = mode === 'manga' ? generateMangaBtn : generateImageBtn;
 
@@ -1787,11 +1852,15 @@ async function generateImages(mode = 'image') {
         return;
     }
 
-    const prompt = promptInput.value.trim();
+    // Get prompt and apply optional prefix (without modifying the input field)
+    const userPrompt = promptInput.value.trim();
+    const prompt = promptPrefix ? promptPrefix + userPrompt : userPrompt;
     const apiKey = apiKeyInput.value.trim();
 
     // Validation
-    if (!prompt) {
+    // Validation
+    // Manga mode can run without user prompt (uses default manga prompt)
+    if (!userPrompt && mode !== 'manga') {
         showStatus('プロンプトを入力してください', 'error');
         return;
     }
@@ -1814,8 +1883,109 @@ async function generateImages(mode = 'image') {
     const useEditMode = uploadedImages.length > 0;
 
     // Prepare request parameters
+    // Define manga creation prompt to append when in manga mode
+    const MANGA_PROMPT_SUFFIX = `
+"request type": "Generate ultra-high-quality and expressive Japanese manga pages ",
+ "description": "アップロードされている資料を詳細に分析し、読み取った漫画のストーリーを**アップロードされているキャラクター画像の外見の特徴を忠実に反映させ**ステップバイステップにストーリーが伝わるプロフェッショナルな漫画1ページを日本の漫画家の技法を最大限用いて作成してください
+
+"step": 1,
+"name": アップロードされている画像の役割を判別する
+"action": "アップロードされている画像を１枚ずつ４つの役割のいずれかに慎重に仕分けする"
+"details":
+-アップロードされている画像を、漫画に登場するキャラクターシート、漫画の舞台、既に作成済みの清書された漫画、漫画のストーリーの下書き、これら4つの役割に仕分ける
+
+"step": 2,
+"name": "漫画のストーリーの重要度を判断する
+"action":既に作成済みの清書された漫画と漫画のストーリーの下書きを読み解き物語のそれぞれの場面の重要性を判断する",
+
+"step": 3,
+"name": ストーリーに合わせた漫画のコマ形状・コマ配置計画",
+"action": "読み取った漫画のストーリーの下書きを漫画にするため、コマ割り計画をプロフェッショナルな漫画のテクニックを用いてストーリーが読みやすく内容を魅力的に伝える計画を行う",
+"details":
+-ストーリーの進行は日本の漫画形式に合わせて**右上から左下**の順番に進める。
+-キャラクターの感情変化や激しい動きに合わせて変則的または自由配置なコマ構成とする。
+-ストーリーを最大限伝える描写をイメージしながらコマの数は極力少ないものとする
+-コマ毎に表現する内容の重要性や意味に基づき、コマのサイズと形を決定する
+  - **大コマ**：重要性がもっとも高い。激しい動き、激しい感情変化、話の結論シーン、動作完了のシーン、セリフ量が多いシーン 
+  - **中・小コマ**：説明、会話、経過  
+  - **重なる浮きコマ**：会話や動作によって即座に起こる次のシーンを印象付ける
+  - **ぶち抜きコマ**：キャラクターの身体がコマから飛び出る表現、キャラクターの動作や会話を超印象付ける重要なシーンに使用
+  - **斜めコマ**：勢いや迫力、驚きやスピード感を出す
+-キャラクターの感情変化や激しい動きが無い場合は四角のコマ構成とする
+-漫画の始めのコマは右上からスタートする
+-漫画１ページの構成は１段のみの構成、２段構成、3段構成のいずれかとする
+-いずれかの段を右と左に分ける2コマで構成する場合、その下部のコマは横に長い1コマとする
+-コマの配置は空きスペースを確認して常に空きスペースに対して上につめる
+-コマの配置は段ごとに下線部を揃える
+-コマの配置は常に右詰めとする
+
+"step": 4,
+"name": "ストーリーに合わせたキャラクターの構図決定",
+"action": "ストーリーを魅力的に表現するため漫画のテクニックを用いてコマ毎にキャラクターの構図を計画する",
+"details":
+【テクニック】
+-**他のキャラクターと描き分けるためアップロードされている漫画に登場するキャラクターの画像を参照する**
+【テクニック】
+-**アップロードされている漫画に登場するキャラクターの服装と髪型の特徴を詳細に漫画に反映する**
+【テクニック】描写対象の構図を変える
+- **禁止事項**：キャラクターの正面バストアップ描写の連続
+- 対策：  
+  - キャラクターの全身姿や物語の舞台を広く見せるロングショット  
+  - 動きのある手元・動きのある足元・小物のインサート  
+  - 背中で語る構図  
+  - 背中超しから話者を見るショルダーショットの構図  
+  - 全てのコマの構図または表現方法に変化をつける
+
+【テクニック】アングルでキャラクターの置かれた状況や心境を表現する
+- **俯瞰**：状況説明、孤独・弱さ  
+- **アオリ**：迫力、威圧、希望、存在感
+
+【テクニック】効果的なフレーミングを行う
+- 表情の一部だけを見せる、身体の一部をアップにするなどで心理描写を強調  
+- 伝えたい意図が最も伝わる「被写体の切り取り方」を常に模索し、感情や行動、思考の様子を最大限表現する 
+
+"step": 5,
+"name": "ストーリーに合わせたキャラクターとセリフの描写",
+"action": "ストーリーに合わせて計画されているキャラクターや背景、吹き出しを高品質で傑作となるように描写する
+"details":
+- アップロードされているキャラクター画像の色から描写する画風と色調を判断。    
+-ストーリーは漫画の技法、映画の演出技法、アニメの演出技法を用いて表現豊かなものとする 
+-ストーリーを直感的にダイナミックに伝えるためエフェクトを加えてストーリーを情緒豊かに加筆する"
+-動きの軌跡を描く、動作の方向性を表現する
+-キャラクター動作に合わせ動作の方向性を表現するアクション線・スピード線・効果線・モーションブラーを加える
+-キャラクター画像の顔の特徴を分析し、キャラクターの感情に合わせて陰影を加える、デフォルト顔にする、劇画風にする等テクニックを用いて表情豊かにする
+-**禁止事項**アップロードされているキャラクターの**特徴(特に髪型や服装や画風やフォルム)**を反映させない完全な別人へのアレンジ  
+-アップロードされているキャラクター独自の特有の個性や象徴となるシンボルを確実に反映させる
+-ストーリーの「」内のセリフや心の声は感情表現に合わせて最適な形を選定して情緒豊かな吹き出しにする
+-日本のタイポグラファ－エージェントを入れて、吹き出し内にセリフ文字を正しく描写する
+-**禁止事項**漫画の吹き出し内のセリフにフリガナをつけることや同じ単語の繰り返し。
+-ストーリーに書かれているセリフや心の声以外の文章は漫画には記載しない
+-**禁止事項**「」内のセリフを英語にすること。「」内に英語指示がある場合は指示に従う
+- セリフだけでなく、背景（色ベタ・効果線など）や、吹き出し色付け、レンズ効果、被写体深度で心理描写を行う
+-**禁止事項**オノマトペ(擬音語)や効果音を記載する。
+-読み取った漫画のストーリーの内容は全てイラストで表現する
+-吹き出しの**中心を結んだ線**が右から左、上から下に自然と進むように吹き出し配置を行いストーリーの順に合わせて視線を誘導する
+
+"step": 6,
+"name": "出力前チェック",
+"action": "計画された漫画１ページの画像を出力する前にこれまでのstepで指示されている内容を確認し、現在の計画に不適合があれば是正する ",
+"details":
+-**各step毎に禁止されていることを確認して現在の計画が適切になるように画像出力前に計画の修正を行う**
+-漫画のストーリーの下書き内に書かれたセリフ以外の文章(ストーリー)を作成予定の漫画１ページに文字で記載予定ならば削除して、その内容はイラスト化する
+-右上から始まる漫画になっているか確認を行い、不適切な場合は是正する
+-高品質な漫画になっていないことを疑い、最高傑作で最高品質となったものを出力する
+-**アップロードされている画像のキャラクターがストーリーの指示通りに登場する漫画になっているか髪型や服装や外見的な特徴の確認を行い不適切な場合は是正する**
+`;
+
+    // Build the final prompt - append manga suffix if in manga mode
+    let finalPrompt = prompt;
+    if (mode === 'manga') {
+        finalPrompt = prompt + '\n\n' + MANGA_PROMPT_SUFFIX;
+        console.log('Manga mode: Appended manga creation instructions to prompt');
+    }
+
     const params = {
-        prompt: prompt,
+        prompt: finalPrompt,
         num_images: numImagesSelect ? parseInt(numImagesSelect.value) : 1,
         aspect_ratio: aspectRatioSelect ? aspectRatioSelect.value : '1:1',
         resolution: resolutionSelect ? resolutionSelect.value : '1K',
@@ -1898,6 +2068,36 @@ if (generateMangaBtn) {
     });
 }
 
+// Edit Text button with special prompt prepending
+if (editTextBtn) {
+    editTextBtn.addEventListener('click', () => {
+        // Mode 3: Text Editing - prepend special prompt for manga text editing
+        const textEditPrompt = `アップロードされている画像で**赤く塗りつぶされている四角い場所に指定する文字をルールに従って画像で描写してください**。
+
+＃ルール
+
+-指定文字を画像で配置する順番は「」毎に赤く塗りつぶしされた場所に日本の漫画形式に従って右から左、上から下の順に配置する。
+
+-指定文字の「」内に書かれた文字を配置する
+
+-赤く塗りつぶされた四角を完全に削除する。
+
+-赤く塗りつぶされた四角い場所は画像の背景に合うように修正する
+
+-指定文字を画像で描写する際は不均一な配置を許可する
+
+-指定文字は全て描写する
+
+-描写する文字画像全体の計画を立てた後に日本語が正しいか確認を行い描写する
+
+＃指定文字
+
+`;
+        // Pass the special prompt prefix without modifying the input field
+        generateImages('image', textEditPrompt);
+    });
+}
+
 // Clear prompt button
 if (clearPromptBtn) {
     clearPromptBtn.addEventListener('click', () => {
@@ -1958,3 +2158,484 @@ window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
     console.log('PWA was installed');
 });
+
+// ==========================================
+// Image Editor Functionality
+// ==========================================
+
+// Image Editor State
+const imageEditorModal = document.getElementById('imageEditorModal');
+const editorCanvas = document.getElementById('editorCanvas');
+const editorCanvasContainer = document.getElementById('editorCanvasContainer');
+const closeEditorBtn = document.getElementById('closeEditorBtn');
+const cancelEditorBtn = document.getElementById('cancelEditorBtn');
+const saveEditorBtn = document.getElementById('saveEditorBtn');
+const addRedFrameBtn = document.getElementById('addRedFrameBtn');
+const deleteFrameBtn = document.getElementById('deleteFrameBtn');
+
+let editorCtx = editorCanvas ? editorCanvas.getContext('2d') : null;
+let editorImage = null;
+let editorImageType = 'image/png'; // Track original image type
+let redFrames = [];
+let selectedFrame = null;
+let isDragging = false;
+let isResizing = false;
+let isRotating = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let resizeHandle = null;
+
+// Red Frame class
+class RedFrame {
+    constructor(x, y, width = 100, height = 60) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.rotation = 0;
+        this.selected = false;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+        ctx.rotate(this.rotation);
+
+        // Draw filled red rectangle
+        ctx.fillStyle = 'rgba(255, 0, 0, 1)';
+        ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+
+        // Draw border if selected
+        if (this.selected) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(-this.width / 2, -this.height / 2, this.width, this.height);
+            ctx.setLineDash([]);
+
+            // Draw resize handles
+            const handleSize = 10;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+
+            // Corner handles
+            const corners = [
+                { x: -this.width / 2, y: -this.height / 2 },
+                { x: this.width / 2, y: -this.height / 2 },
+                { x: -this.width / 2, y: this.height / 2 },
+                { x: this.width / 2, y: this.height / 2 }
+            ];
+
+            corners.forEach(corner => {
+                ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+                ctx.strokeRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+            });
+
+            // Rotation handle
+            ctx.beginPath();
+            ctx.moveTo(0, -this.height / 2);
+            ctx.lineTo(0, -this.height / 2 - 25);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(0, -this.height / 2 - 30, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#4CAF50';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    contains(x, y) {
+        // Transform point to local coordinates
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const cos = Math.cos(-this.rotation);
+        const sin = Math.sin(-this.rotation);
+        const dx = x - cx;
+        const dy = y - cy;
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+
+        return Math.abs(localX) <= this.width / 2 && Math.abs(localY) <= this.height / 2;
+    }
+
+    getHandleAt(x, y) {
+        if (!this.selected) return null;
+
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        const cos = Math.cos(-this.rotation);
+        const sin = Math.sin(-this.rotation);
+        const dx = x - cx;
+        const dy = y - cy;
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+
+        const handleSize = 15;
+
+        // Check rotation handle
+        if (Math.abs(localX) < handleSize && localY < -this.height / 2 - 15 && localY > -this.height / 2 - 45) {
+            return 'rotate';
+        }
+
+        // Check corner handles
+        const corners = [
+            { name: 'nw', x: -this.width / 2, y: -this.height / 2 },
+            { name: 'ne', x: this.width / 2, y: -this.height / 2 },
+            { name: 'sw', x: -this.width / 2, y: this.height / 2 },
+            { name: 'se', x: this.width / 2, y: this.height / 2 }
+        ];
+
+        for (const corner of corners) {
+            if (Math.abs(localX - corner.x) < handleSize && Math.abs(localY - corner.y) < handleSize) {
+                return corner.name;
+            }
+        }
+
+        return null;
+    }
+}
+
+// Open image editor
+function openImageEditor(imageUrl) {
+    if (!imageEditorModal || !editorCanvas) return;
+
+    imageEditorModal.style.display = 'flex';
+    redFrames = [];
+    selectedFrame = null;
+
+    // Detect image type from URL or fetch
+    editorImageType = 'image/png'; // Default
+    if (imageUrl.match(/\.jpe?g(\?|$)/i)) {
+        editorImageType = 'image/jpeg';
+    } else if (imageUrl.match(/\.webp(\?|$)/i)) {
+        editorImageType = 'image/webp';
+    } else if (imageUrl.match(/\.png(\?|$)/i)) {
+        editorImageType = 'image/png';
+    }
+
+    // Load image
+    editorImage = new Image();
+    editorImage.crossOrigin = 'anonymous';
+    editorImage.onload = () => {
+        // Set canvas size based on image and container
+        const containerWidth = editorCanvasContainer.clientWidth - 40;
+        const containerHeight = editorCanvasContainer.clientHeight - 40;
+
+        let scale = Math.min(
+            containerWidth / editorImage.width,
+            containerHeight / editorImage.height,
+            1
+        );
+
+        editorCanvas.width = editorImage.width * scale;
+        editorCanvas.height = editorImage.height * scale;
+
+        renderEditor();
+    };
+    editorImage.onerror = () => {
+        console.error('Failed to load image for editing');
+        showStatus('画像の読み込みに失敗しました', 'error');
+        setTimeout(() => clearStatus(), 2000);
+        closeImageEditor();
+    };
+    editorImage.src = imageUrl;
+
+    updateDeleteButtonState();
+}
+
+// Close image editor
+function closeImageEditor() {
+    if (imageEditorModal) {
+        imageEditorModal.style.display = 'none';
+    }
+    redFrames = [];
+    selectedFrame = null;
+    editorImage = null;
+}
+
+// Render editor canvas
+function renderEditor() {
+    if (!editorCtx || !editorImage) return;
+
+    // Clear canvas
+    editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
+
+    // Draw image
+    editorCtx.drawImage(editorImage, 0, 0, editorCanvas.width, editorCanvas.height);
+
+    // Draw all red frames
+    redFrames.forEach(frame => frame.draw(editorCtx));
+}
+
+// Add red frame
+function addRedFrame() {
+    const x = editorCanvas.width / 2 - 50;
+    const y = editorCanvas.height / 2 - 30;
+    const frame = new RedFrame(x, y);
+    frame.selected = true;
+
+    // Deselect others
+    redFrames.forEach(f => f.selected = false);
+
+    redFrames.push(frame);
+    selectedFrame = frame;
+    updateDeleteButtonState();
+    renderEditor();
+}
+
+// Delete selected frame
+function deleteSelectedFrame() {
+    if (selectedFrame) {
+        const index = redFrames.indexOf(selectedFrame);
+        if (index > -1) {
+            redFrames.splice(index, 1);
+        }
+        selectedFrame = null;
+        updateDeleteButtonState();
+        renderEditor();
+    }
+}
+
+// Update delete button state
+function updateDeleteButtonState() {
+    if (deleteFrameBtn) {
+        deleteFrameBtn.disabled = !selectedFrame;
+    }
+}
+
+// Get canvas coordinates from event
+function getCanvasCoords(e) {
+    const rect = editorCanvas.getBoundingClientRect();
+    const scaleX = editorCanvas.width / rect.width;
+    const scaleY = editorCanvas.height / rect.height;
+
+    let clientX, clientY;
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+// Handle pointer down
+function handlePointerDown(e) {
+    e.preventDefault();
+    const { x, y } = getCanvasCoords(e);
+
+    // Check if clicking on a handle of selected frame
+    if (selectedFrame) {
+        const handle = selectedFrame.getHandleAt(x, y);
+        if (handle) {
+            if (handle === 'rotate') {
+                isRotating = true;
+            } else {
+                isResizing = true;
+                resizeHandle = handle;
+            }
+            dragStartX = x;
+            dragStartY = y;
+            return;
+        }
+    }
+
+    // Check if clicking on a frame
+    let clickedFrame = null;
+    for (let i = redFrames.length - 1; i >= 0; i--) {
+        if (redFrames[i].contains(x, y)) {
+            clickedFrame = redFrames[i];
+            break;
+        }
+    }
+
+    // Update selection
+    redFrames.forEach(f => f.selected = false);
+    if (clickedFrame) {
+        clickedFrame.selected = true;
+        selectedFrame = clickedFrame;
+        isDragging = true;
+        dragStartX = x - clickedFrame.x;
+        dragStartY = y - clickedFrame.y;
+    } else {
+        selectedFrame = null;
+    }
+
+    updateDeleteButtonState();
+    renderEditor();
+}
+
+// Handle pointer move
+function handlePointerMove(e) {
+    if (!selectedFrame) return;
+
+    const { x, y } = getCanvasCoords(e);
+
+    if (isDragging) {
+        selectedFrame.x = x - dragStartX;
+        selectedFrame.y = y - dragStartY;
+        renderEditor();
+    } else if (isResizing) {
+        const cx = selectedFrame.x + selectedFrame.width / 2;
+        const cy = selectedFrame.y + selectedFrame.height / 2;
+
+        // Calculate new size based on handle
+        const cos = Math.cos(-selectedFrame.rotation);
+        const sin = Math.sin(-selectedFrame.rotation);
+        const dx = x - cx;
+        const dy = y - cy;
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+
+        const minSize = 30;
+
+        if (resizeHandle.includes('e')) {
+            selectedFrame.width = Math.max(minSize, localX * 2);
+        }
+        if (resizeHandle.includes('w')) {
+            selectedFrame.width = Math.max(minSize, -localX * 2);
+        }
+        if (resizeHandle.includes('s')) {
+            selectedFrame.height = Math.max(minSize, localY * 2);
+        }
+        if (resizeHandle.includes('n')) {
+            selectedFrame.height = Math.max(minSize, -localY * 2);
+        }
+
+        // Recenter
+        selectedFrame.x = cx - selectedFrame.width / 2;
+        selectedFrame.y = cy - selectedFrame.height / 2;
+
+        renderEditor();
+    } else if (isRotating) {
+        const cx = selectedFrame.x + selectedFrame.width / 2;
+        const cy = selectedFrame.y + selectedFrame.height / 2;
+        selectedFrame.rotation = Math.atan2(x - cx, -(y - cy));
+        renderEditor();
+    }
+}
+
+// Handle pointer up
+function handlePointerUp() {
+    isDragging = false;
+    isResizing = false;
+    isRotating = false;
+    resizeHandle = null;
+}
+
+// Save edited image
+function saveEditedImage() {
+    if (!editorCanvas || !editorImage) return;
+
+    // Create high-resolution canvas for export
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = editorImage.width;
+    exportCanvas.height = editorImage.height;
+    const exportCtx = exportCanvas.getContext('2d');
+
+    // Calculate scale
+    const scaleX = editorImage.width / editorCanvas.width;
+    const scaleY = editorImage.height / editorCanvas.height;
+
+    // Draw original image
+    exportCtx.drawImage(editorImage, 0, 0);
+
+    // Draw red frames at full resolution
+    redFrames.forEach(frame => {
+        exportCtx.save();
+        exportCtx.translate((frame.x + frame.width / 2) * scaleX, (frame.y + frame.height / 2) * scaleY);
+        exportCtx.rotate(frame.rotation);
+
+        exportCtx.fillStyle = 'rgba(255, 0, 0, 1)';
+        exportCtx.fillRect(
+            -frame.width * scaleX / 2,
+            -frame.height * scaleY / 2,
+            frame.width * scaleX,
+            frame.height * scaleY
+        );
+
+        exportCtx.restore();
+    });
+
+    // Determine file extension based on image type
+    let fileExtension = '.png';
+    if (editorImageType === 'image/jpeg') fileExtension = '.jpg';
+    else if (editorImageType === 'image/webp') fileExtension = '.webp';
+
+    // Export in original format
+    const quality = editorImageType === 'image/png' ? undefined : 0.92;
+    exportCanvas.toBlob((blob) => {
+        if (!blob) {
+            showStatus('画像の保存に失敗しました', 'error');
+            setTimeout(() => clearStatus(), 2000);
+            return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `scriptoon-edited-${Date.now()}${fileExtension}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showStatus('編集画像を保存しました', 'success');
+        setTimeout(() => clearStatus(), 2000);
+        closeImageEditor();
+    }, editorImageType, quality);
+}
+
+// Event listeners for image editor
+if (editorCanvas) {
+    editorCanvas.addEventListener('mousedown', handlePointerDown);
+    editorCanvas.addEventListener('mousemove', handlePointerMove);
+    editorCanvas.addEventListener('mouseup', handlePointerUp);
+    editorCanvas.addEventListener('mouseleave', handlePointerUp);
+
+    editorCanvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+    editorCanvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+    editorCanvas.addEventListener('touchend', handlePointerUp);
+    editorCanvas.addEventListener('touchcancel', handlePointerUp);
+}
+
+if (closeEditorBtn) {
+    closeEditorBtn.addEventListener('click', closeImageEditor);
+}
+
+if (cancelEditorBtn) {
+    cancelEditorBtn.addEventListener('click', closeImageEditor);
+}
+
+if (saveEditorBtn) {
+    saveEditorBtn.addEventListener('click', saveEditedImage);
+}
+
+if (addRedFrameBtn) {
+    addRedFrameBtn.addEventListener('click', addRedFrame);
+}
+
+if (deleteFrameBtn) {
+    deleteFrameBtn.addEventListener('click', deleteSelectedFrame);
+}
+
+// Close modal on overlay click
+if (imageEditorModal) {
+    imageEditorModal.addEventListener('click', (e) => {
+        if (e.target === imageEditorModal) {
+            closeImageEditor();
+        }
+    });
+}
