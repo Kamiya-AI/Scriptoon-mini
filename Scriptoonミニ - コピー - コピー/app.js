@@ -1901,8 +1901,8 @@ async function generateImages(mode = 'image', promptPrefix = '') {
 
     const apiKey = apiKeyInput.value.trim();
 
-    // Validation - skip prompt check for manga and edit modes
-    if (!prompt && mode === 'image') {
+    // Validation - skip prompt check for manga and edit modes (they have their own prompts)
+    if (!prompt && mode !== 'manga' && mode !== 'edit') {
         showStatus('プロンプトを入力してください', 'error');
         return;
     }
