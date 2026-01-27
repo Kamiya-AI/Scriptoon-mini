@@ -1770,3 +1770,14 @@ footer a:hover {
         font-size: 0.9rem;
     }
 }
+
+/* スマホでの画像長押し保存を許可 */
+.result-item img,
+.image-preview-item img,
+#viewerImage,
+.image-viewer-content img {
+    -webkit-touch-callout: default !important;
+    -webkit-user-select: auto !important;
+    user-select: auto !important;
+    pointer-events: auto !important;
+}
