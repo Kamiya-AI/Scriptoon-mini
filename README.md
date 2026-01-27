@@ -125,10 +125,6 @@ python3 -m http.server 8000
 - 画像はFAL CDNにアップロード後、URLで送信
 - アップロード失敗時はbase64データURIにフォールバック
 
-## ライセンス
-
-MIT License
-
 
 ## 作成者
 
