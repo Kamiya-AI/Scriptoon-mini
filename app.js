@@ -1963,13 +1963,15 @@ window.addEventListener('appinstalled', () => {
 // iOS PWA Install Guide
 // ==========================================
 // Detect iOS and show install guide if not in standalone mode
-(function () {
+document.addEventListener('DOMContentLoaded', function () {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
     const iosPwaGuide = document.getElementById('iosPwaGuide');
+
+    console.log('iOS check - isIOS:', isIOS, 'isStandalone:', isStandalone, 'iosPwaGuide:', iosPwaGuide);
 
     if (isIOS && !isStandalone && iosPwaGuide) {
         iosPwaGuide.style.display = 'block';
         console.log('iOS detected, showing PWA install guide');
     }
-})();
+});

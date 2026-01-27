@@ -1,4 +1,4 @@
-const CACHE_NAME = 'scriptoon-mini-v1.1.20';
+const CACHE_NAME = 'scriptoon-mini-v1.1.21';
 const urlsToCache = [
     './',
     './index.html',
