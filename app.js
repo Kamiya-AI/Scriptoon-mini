@@ -117,51 +117,6 @@ const imageViewerModal = document.getElementById('imageViewerModal');
 const viewerImage = document.getElementById('viewerImage');
 const closeViewerBtn = document.getElementById('closeViewerBtn');
 
-// --- PWA Install Prompt ---
-let deferredPrompt;
-
-// Listen for the beforeinstallprompt event
-window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the mini-infobar from appearing on mobile
-    e.preventDefault();
-    // Stash the event so it can be triggered later
-    deferredPrompt = e;
-    // Show the install button
-    if (installButton) {
-        installButton.style.display = 'block';
-    }
-    console.log('beforeinstallprompt event fired, install button shown');
-});
-
-// Handle install button click
-if (installButton) {
-    installButton.addEventListener('click', async () => {
-        if (!deferredPrompt) {
-            console.log('No deferred prompt available');
-            return;
-        }
-        // Show the install prompt
-        deferredPrompt.prompt();
-        // Wait for the user to respond to the prompt
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`User response to the install prompt: ${outcome}`);
-        // Clear the deferred prompt
-        deferredPrompt = null;
-        // Hide the install button
-        installButton.style.display = 'none';
-    });
-}
-
-// Listen for app installed event
-window.addEventListener('appinstalled', () => {
-    console.log('PWA was installed');
-    // Hide the install button
-    if (installButton) {
-        installButton.style.display = 'none';
-    }
-    deferredPrompt = null;
-});
-
 // Image upload state
 let uploadedImages = [];
 
